@@ -1,0 +1,214 @@
+namespace ZSheet;
+
+static class Ui
+{
+    public static readonly Color Blue = Color.FromArgb(43, 99, 217), BlueDark = Color.FromArgb(27, 63, 156), BlueSoft = Color.FromArgb(238, 243, 253), BlueLine = Color.FromArgb(217, 229, 251),
+        Danger = Color.FromArgb(210, 62, 62), Green = Color.FromArgb(46, 158, 91), Orange = Color.FromArgb(232, 137, 12), Purple = Color.FromArgb(123, 79, 209);
+
+    // kind: 0 보통, 1 파랑, 2 삭제(빨강 글자), 3 초록, 4 주황, 5 보라
+    public static Button Btn(string text, EventHandler click, int kind = 0)
+    {
+        var b = new Button { Text = text, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlatStyle = FlatStyle.Flat, Height = 32, Padding = new Padding(6, 0, 6, 0), Margin = new Padding(3), Cursor = Cursors.Hand, UseVisualStyleBackColor = false };
+        b.FlatAppearance.BorderSize = 1;
+        Color fill = kind switch { 1 => Blue, 3 => Green, 4 => Orange, 5 => Purple, _ => Color.White };
+        if (kind == 1 || kind == 3 || kind == 4 || kind == 5) { b.BackColor = fill; b.ForeColor = Color.White; b.FlatAppearance.BorderColor = fill; }
+        else { b.BackColor = Color.White; b.ForeColor = kind == 2 ? Danger : BlueDark; b.FlatAppearance.BorderColor = Color.FromArgb(180, 200, 240); b.FlatAppearance.MouseOverBackColor = BlueLine; }
+        if (click != null) b.Click += click;
+        return b;
+    }
+
+    public static void StyleGrid(DataGridView g)
+    {
+        g.BackgroundColor = Color.White; g.BorderStyle = BorderStyle.None;
+        g.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal; g.GridColor = Color.FromArgb(230, 236, 247);
+        g.EnableHeadersVisualStyles = false;
+        g.ColumnHeadersDefaultCellStyle.BackColor = BlueSoft; g.ColumnHeadersDefaultCellStyle.ForeColor = BlueDark;
+        g.ColumnHeadersDefaultCellStyle.Font = new Font("Malgun Gothic", 9.5f, FontStyle.Bold);
+        g.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.Single;
+        g.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing; g.ColumnHeadersHeight = 32;
+        g.DefaultCellStyle.SelectionBackColor = BlueLine; g.DefaultCellStyle.SelectionForeColor = Color.Black;
+        g.RowHeadersVisible = true; g.RowHeadersWidth = 28; g.RowTemplate.Height = 26;
+        g.AllowUserToAddRows = false; g.AllowUserToDeleteRows = false; g.AllowUserToResizeRows = false;
+        g.SelectionMode = DataGridViewSelectionMode.RowHeaderSelect;
+    }
+
+    /// 한 줄 입력창. 취소하면 null
+    public static string Ask(IWin32Window owner, string title, string label, string def = "", bool pw = false)
+    {
+        using var f = new Form { Text = title, Width = 420, Height = 170, StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, ShowInTaskbar = false, Font = new Font("Malgun Gothic", 9.5f) };
+        f.Controls.Add(new Label { Left = 14, Top = 14, Width = 380, Text = label });
+        var t = new TextBox { Left = 14, Top = 40, Width = 376, Text = def, UseSystemPasswordChar = pw };
+        f.Controls.Add(t);
+        var ok = Btn("확인", null, 1); ok.Left = 224; ok.Top = 84; ok.DialogResult = DialogResult.OK;
+        var cancel = Btn("취소", null); cancel.Left = 310; cancel.Top = 84; cancel.DialogResult = DialogResult.Cancel;
+        f.Controls.Add(ok); f.Controls.Add(cancel); f.AcceptButton = ok; f.CancelButton = cancel;
+        return f.ShowDialog(owner) == DialogResult.OK ? t.Text : null;
+    }
+
+    public static Icon MakeIcon()
+    {
+        try
+        {
+            using var st = typeof(Ui).Assembly.GetManifestResourceStream("z2roN_Proj.ico");
+            if (st != null) return new Icon(st);
+        }
+        catch { }
+        using var bmp = new Bitmap(32, 32);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias; g.Clear(Color.Transparent);
+            using var br = new SolidBrush(Blue); g.FillEllipse(br, 1, 1, 30, 30);
+            using var f = new Font("Segoe UI", 18, FontStyle.Bold, GraphicsUnit.Pixel);
+            g.DrawString("z", f, Brushes.White, 8, 4);
+        }
+        return Icon.FromHandle(bmp.GetHicon());
+    }
+
+    public static string GenPassword()
+    {
+        const string a = "abcdefghjkmnpqrstuvwxyz23456789";
+        var b = System.Security.Cryptography.RandomNumberGenerator.GetBytes(8);
+        return new string(b.Select(x => a[x % a.Length]).ToArray());
+    }
+
+    /// 자체 서명 HTTPS 인증서(.pfx) 만들기 (브라우저에 경고가 나옴)
+    public static void MakeSelfSigned(string host, string pw, string path)
+    {
+        using var rsa = System.Security.Cryptography.RSA.Create(2048);
+        var req = new System.Security.Cryptography.X509Certificates.CertificateRequest("CN=" + host, rsa, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        var san = new System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder(); san.AddDnsName(host); san.AddDnsName("localhost");
+        req.CertificateExtensions.Add(san.Build());
+        using var cert = req.CreateSelfSigned(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now.AddYears(5));
+        File.WriteAllBytes(path, cert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Pfx, pw));
+    }
+
+    static Form Dlg(string title, int w, int h) => new Form { Text = title, Width = w, Height = h, StartPosition = FormStartPosition.CenterScreen, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false, TopMost = true, Font = new Font("Malgun Gothic", 9.5f) };
+
+    /// 서버 관리 창 열기 전 관리자 확인. 맞으면 true
+    public static bool LoginDialog(IWin32Window owner, Db db)
+    {
+        using var f = Dlg("관리자 확인 — " + Db.AppName, 380, 230);
+        f.Controls.Add(new Label { Left = 14, Top = 14, Text = "관리자 아이디", AutoSize = true }); var n = new TextBox { Left = 14, Top = 34, Width = 340 }; f.Controls.Add(n);
+        f.Controls.Add(new Label { Left = 14, Top = 70, Text = "비밀번호", AutoSize = true }); var p = new TextBox { Left = 14, Top = 90, Width = 340, UseSystemPasswordChar = true }; f.Controls.Add(p);
+        var ok = Btn("확인", null, 1); ok.Left = 190; ok.Top = 140; var cc = Btn("취소", null); cc.Left = 276; cc.Top = 140; cc.DialogResult = DialogResult.Cancel;
+        bool good = false;
+        var forgot = new LinkLabel { Left = 14, Top = 146, AutoSize = true, Text = "비밀번호를 잊으셨나요?" };
+        forgot.LinkClicked += (_, _) => ResetFlow(f, db);
+        f.Controls.Add(forgot);
+        ok.Click += (_, _) =>
+        {
+            var u = db.CheckLogin(n.Text.Trim(), p.Text);
+            if (u != null && u.Role == "admin") { good = true; db.Log(u.Name, "서버 관리 화면 열기", ""); f.DialogResult = DialogResult.OK; }
+            else { MessageBox.Show(f, "관리자 아이디 또는 비밀번호가 맞지 않습니다.", Db.AppName); p.Clear(); p.Focus(); }
+        };
+        f.Controls.Add(ok); f.Controls.Add(cc); f.AcceptButton = ok; f.CancelButton = cc;
+        f.ShowDialog(owner);
+        return good;
+    }
+
+    /// 전체 데이터 초기화 확인: 관리자 아이디·비밀번호가 맞고 확인 글자("초기화")를 입력해야 통과. 통과하면 관리자 이름을 돌려줌(아니면 null)
+    public static string WipeDialog(IWin32Window owner, Db db, int sheets, long rows)
+    {
+        using var f = Dlg("전체 데이터 초기화 — 관리자 확인", 420, 330);
+        f.Controls.Add(new Label { Left = 14, Top = 12, Width = 380, Height = 58, ForeColor = Danger, Font = new Font("Malgun Gothic", 9.5f, FontStyle.Bold),
+            Text = "시트 " + sheets.ToString("N0") + "개 / 행 " + rows.ToString("N0") + "건이 모두 삭제됩니다.\n(계정과 설정은 유지, 삭제 직전의 DB 는 backup 폴더에 자동 복사)" });
+        f.Controls.Add(new Label { Left = 14, Top = 76, Text = "관리자 아이디", AutoSize = true }); var n = new TextBox { Left = 14, Top = 96, Width = 380, Text = "admin" }; f.Controls.Add(n);
+        f.Controls.Add(new Label { Left = 14, Top = 130, Text = "비밀번호", AutoSize = true }); var p = new TextBox { Left = 14, Top = 150, Width = 380, UseSystemPasswordChar = true }; f.Controls.Add(p);
+        f.Controls.Add(new Label { Left = 14, Top = 184, Text = "확인을 위해 [초기화] 라고 입력하세요", AutoSize = true }); var w = new TextBox { Left = 14, Top = 204, Width = 380 }; f.Controls.Add(w);
+        var ok = Btn("전체 삭제", null, 2); ok.Left = 210; ok.Top = 246; var cc = Btn("취소", null); cc.Left = 316; cc.Top = 246; cc.DialogResult = DialogResult.Cancel;
+        string who = null;
+        ok.Click += (_, _) =>
+        {
+            var u = db.CheckLogin(n.Text.Trim(), p.Text);
+            if (u == null || u.Role != "admin") { MessageBox.Show(f, "관리자 아이디 또는 비밀번호가 맞지 않습니다.", Db.AppName); p.Clear(); p.Focus(); return; }
+            if (w.Text.Trim() != "초기화") { MessageBox.Show(f, "확인 글자 [초기화] 를 정확히 입력하세요.", Db.AppName); w.Focus(); return; }
+            who = u.Name; f.DialogResult = DialogResult.OK;
+        };
+        f.Controls.Add(ok); f.Controls.Add(cc); f.CancelButton = cc;
+        f.ShowDialog(owner);
+        return who;
+    }
+
+    // ---- 바코드 자리수 검사 (서버 창, 이 PC 에서만 설정) ----
+    /// 스캔한 바코드 자리수가 지정과 다르면 경고음을 내고 설명 글자를 돌려줌 (맞거나 검사를 안 쓰면 "")
+    public static string DigitWarn(Config cfg, string code)
+    {
+        if (!cfg.DigitOn) return "";
+        var l = cfg.DigitList();
+        if (l.Count == 0 || l.Contains(code.Length)) return "";
+        Alarm();
+        return code.Length + "자리 — 지정 자리수(" + string.Join(", ", l) + ")와 다릅니다";
+    }
+    /// 경고음 3번 (소리 크기는 PC 볼륨을 따름)
+    public static void Alarm()
+    {
+        Task.Run(() =>
+        {
+            try { for (int i = 0; i < 3; i++) Console.Beep(i % 2 == 0 ? 1000 : 650, 220); }
+            catch { try { System.Media.SystemSounds.Hand.Play(); } catch { } }
+        });
+    }
+
+    // ---- 관리자 비밀번호 초기화 (서버 PC 에서만, Windows 관리자 권한 확인 후) ----
+    public static bool IsWindowsAdmin()
+    {
+        try { return new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent()).IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator); }
+        catch { return false; }
+    }
+
+    /// 이 PC 의 Windows 관리자(UAC 승인)만 비밀번호를 새로 정할 수 있음. 웹·외부에서는 불가능.
+    public static void ResetFlow(IWin32Window owner, Db db)
+    {
+        if (IsWindowsAdmin()) { ResetAdminDialog(owner, db); return; }
+        if (MessageBox.Show(owner, "관리자 비밀번호를 새로 정합니다.\n\n이 PC 의 Windows 관리자 확인(승인 창)이 필요합니다.\n[예]를 누른 뒤 승인 창에서 [예]를 누르면 초기화 창이 열립니다.\n\n계속할까요?", Db.AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath, "--reset-admin") { UseShellExecute = true, Verb = "runas" }); }
+        catch { MessageBox.Show(owner, "Windows 관리자 승인이 없어 취소되었습니다.", Db.AppName); }
+    }
+
+    public static bool ResetAdminDialog(IWin32Window owner, Db db)
+    {
+        var admins = Store.Users(db).Where(x => x.Role == "admin").ToList();
+        if (admins.Count == 0) { MessageBox.Show(owner, "관리자 계정이 없습니다. 서버를 다시 실행해 처음 시작 화면에서 만드세요.", Db.AppName); return false; }
+        using var f = Dlg("관리자 비밀번호 초기화 — " + Db.AppName, 400, 330);
+        f.Controls.Add(new Label { Left = 14, Top = 12, Width = 360, Height = 36, Text = "이 PC 에서 Windows 관리자 확인을 마쳤습니다. 관리자 계정을 고르고 새 비밀번호를 정하세요." });
+        f.Controls.Add(new Label { Left = 14, Top = 58, Text = "관리자 아이디", AutoSize = true });
+        var cb = new ComboBox { Left = 14, Top = 78, Width = 360, DropDownStyle = ComboBoxStyle.DropDownList }; foreach (var a in admins) cb.Items.Add(a.Name); cb.SelectedIndex = 0; f.Controls.Add(cb);
+        f.Controls.Add(new Label { Left = 14, Top = 112, Text = "새 비밀번호 (6자 이상)", AutoSize = true }); var p = new TextBox { Left = 14, Top = 132, Width = 360, UseSystemPasswordChar = true }; f.Controls.Add(p);
+        f.Controls.Add(new Label { Left = 14, Top = 166, Text = "새 비밀번호 확인", AutoSize = true }); var p2 = new TextBox { Left = 14, Top = 186, Width = 360, UseSystemPasswordChar = true }; f.Controls.Add(p2);
+        var ok = Btn("비밀번호 바꾸기", null, 1); ok.Width = 130; ok.Left = 160; ok.Top = 236; var cc = Btn("취소", null); cc.Left = 296; cc.Top = 236; cc.DialogResult = DialogResult.Cancel;
+        bool good = false;
+        ok.Click += (_, _) =>
+        {
+            if (p.Text.Length < 6) { MessageBox.Show(f, "6자 이상 비밀번호를 입력하세요."); return; }
+            if (p.Text != p2.Text) { MessageBox.Show(f, "비밀번호 확인이 다릅니다."); return; }
+            var u = admins[cb.SelectedIndex];
+            db.SetPassword(u.Id, p.Text); db.Log("서버 PC", "관리자 비밀번호 초기화", u.Name);
+            good = true; MessageBox.Show(f, "\"" + u.Name + "\" 의 비밀번호를 바꿨습니다. 로그인되어 있던 기기는 로그아웃됩니다."); f.DialogResult = DialogResult.OK;
+        };
+        f.Controls.Add(ok); f.Controls.Add(cc); f.AcceptButton = ok; f.CancelButton = cc;
+        f.ShowDialog(owner);
+        return good;
+    }
+
+    /// 처음 실행: 관리자 아이디·암호 만들기
+    public static bool SetupAdminDialog(IWin32Window owner, Db db)
+    {
+        using var f = Dlg("처음 시작: 관리자 계정 만들기", 400, 330);
+        f.Controls.Add(new Label { Left = 14, Top = 12, Width = 360, Height = 36, Text = "서버 관리 화면과 클라이언트 관리자 화면에서 쓸 관리자 계정을 만듭니다." });
+        f.Controls.Add(new Label { Left = 14, Top = 58, Text = "관리자 아이디", AutoSize = true }); var n = new TextBox { Left = 14, Top = 78, Width = 360 }; f.Controls.Add(n);
+        f.Controls.Add(new Label { Left = 14, Top = 112, Text = "비밀번호 (6자 이상)", AutoSize = true }); var p = new TextBox { Left = 14, Top = 132, Width = 360, UseSystemPasswordChar = true }; f.Controls.Add(p);
+        f.Controls.Add(new Label { Left = 14, Top = 166, Text = "비밀번호 확인", AutoSize = true }); var p2 = new TextBox { Left = 14, Top = 186, Width = 360, UseSystemPasswordChar = true }; f.Controls.Add(p2);
+        var ok = Btn("만들기", null, 1); ok.Left = 210; ok.Top = 236; var cc = Btn("취소", null); cc.Left = 296; cc.Top = 236; cc.DialogResult = DialogResult.Cancel;
+        bool good = false;
+        ok.Click += (_, _) =>
+        {
+            if (n.Text.Trim() == "" || p.Text.Length < 6) { MessageBox.Show(f, "아이디와 6자 이상 비밀번호를 입력하세요."); return; }
+            if (p.Text != p2.Text) { MessageBox.Show(f, "비밀번호 확인이 다릅니다."); return; }
+            try { db.AddUser(n.Text.Trim(), p.Text, "admin"); db.Log(n.Text.Trim(), "관리자 생성", "서버 화면"); good = true; f.DialogResult = DialogResult.OK; }
+            catch (Exception ex) { MessageBox.Show(f, ex.Message); }
+        };
+        f.Controls.Add(ok); f.Controls.Add(cc); f.AcceptButton = ok; f.CancelButton = cc;
+        f.ShowDialog(owner);
+        return good;
+    }
+}
